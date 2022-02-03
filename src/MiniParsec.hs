@@ -2,6 +2,8 @@ module MiniParsec where
 
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Except (MonadError (..))
+import Control.Monad.State (MonadState (..))
 import Data.Bifunctor
 import Data.Bifunctor (Bifunctor (second))
 import Data.Char
@@ -73,19 +75,41 @@ instance Semigroup a => Semigroup (Parser t a) where
     (s', ResultError e) -> (s', ResultError e)
     (s', ResultOk a) -> second ((a <>) <$>) (p' s')
 
+instance Monoid a => Monoid (Parser t a) where
+  mempty = emptyParser
+
+instance Alternative (Parser t) where
+  empty = emptyParser
+  (<|>) (Parser p) (Parser p') = Parser $ \s -> case p s of
+    ok@(_, ResultOk _) -> ok
+    (_, ResultError e) -> first (\s' -> s' {stateErrors = e : stateErrors s}) (p' s)
+
+instance MonadError (ErrorItem t) (Parser t) where
+  throwError ei = Parser $ \s -> (s, ResultError $ createError s ei)
+  catchError (Parser p) f = Parser $ \s -> case p s of
+    ok@(_, ResultOk _) -> ok
+    (s', ResultError (Error ep ei)) -> parse (f ei) s
+
+instance MonadState (State t) (Parser t) where
+  get = Parser $ \s -> (s, ResultOk s)
+  put s = Parser $ const (s, ResultOk ())
+
+emptyParser :: Parser t a
+emptyParser = Parser $ \s -> (s, ResultError $ createError s (ErrorItemLabel "Empty parser"))
+
 runParser :: Peekable t => Parser t a -> t -> Either (Error t) a
 runParser p t = case parse p (State t 0 []) of
-  (s, ResultOk a) -> if peekNull (stateRemaining s) then Right a else Left (Error (statePosition s) ErrorEndOfInput)
+  (s, ResultOk a) -> if peekNull (stateRemaining s) then Right a else Left (Error (statePosition s) (ErrorItemLabel "Expected end of input"))
   (_, ResultError e) -> Left e
-
--- Right a -> Right a
--- Left State {..} -> Left stateErrors
 
 createError :: State t -> ErrorItem t -> Error t
 createError s = Error (statePosition s)
 
 char :: Char -> ParserT Char
-char c = singleWhere (== c)
+char c = catchError (singleWhere (== c)) catch
+  where
+    catch (ErrorItemLabel _) = throwError (ErrorItemExpected (S.singleton (T.singleton c)))
+    catch ei = throwError ei
 
 singleWhere :: (Char -> Bool) -> ParserT Char
 singleWhere f = Parser $ \s@(State r p se) -> case T.uncons r of
@@ -95,7 +119,8 @@ singleWhere f = Parser $ \s@(State r p se) -> case T.uncons r of
       then (State r' (p + 1) se, ResultOk c')
       else (s, ResultError $ createError s (ErrorItemLabel "Character did not match function"))
 
---   else (s, ResultError $ createError s (ErrorItemExpected (S.singleton (T.singleton c))))
+anySingle :: ParserT Char
+anySingle = singleWhere (const True)
 
 chunk :: Text -> ParserT Text
 chunk t = Parser $ \s@(State r p se) -> case T.stripPrefix t r of

@@ -23,6 +23,7 @@ dependencies:
 - base >= 4.7 && < 5
 - text
 - containers
+- mtl
 
 library:
   source-dirs: src
@@ -34,6 +35,8 @@ library:
   - FlexibleInstances 
   - OverloadedStrings
   - TupleSections
+  - MultiParamTypeClasses 
+  - FlexibleContexts 
 
 executables:
   miniparsec-exe:
