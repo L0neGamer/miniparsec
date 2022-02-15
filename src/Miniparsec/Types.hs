@@ -1,5 +1,5 @@
 module Miniparsec.Types
-  ( Parsec (Parser),
+  ( Parsec (..),
     State (..),
     Result (..),
     Error (..),

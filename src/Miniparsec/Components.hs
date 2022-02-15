@@ -63,3 +63,8 @@ eof :: Stream t => Parsec t ()
 eof = Parser $ \s@(State t _ _) -> case take1Stream t of
   Nothing -> (s, ResultOk ())
   _ -> (s, ResultError (createError s (ErrorItemLabel "expected eof")))
+
+observing :: Stream t => Parsec t a -> Parsec t (Either (ErrorItem t) a)
+observing p = Parser $ \s -> case parse p s of
+  (s', ResultOk a) -> (s', ResultOk (Right a))
+  (s', ResultError (Error _ ei)) -> (s', ResultOk (Left ei))
