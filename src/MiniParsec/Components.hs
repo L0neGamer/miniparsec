@@ -1,10 +1,9 @@
 module MiniParsec.Components where
 
-import MiniParsec.Types
 import Control.Applicative
 import Control.Monad.Except (MonadError (..))
 import qualified Data.Set as S
-import qualified Data.Text as T
+import MiniParsec.Types
 
 singleWhere :: Stream t => (Token t -> Bool) -> Parsec t (Token t)
 singleWhere f = Parser $ \s@(State r p se) -> case take1Stream r of
@@ -28,7 +27,7 @@ choice [] = throwError (ErrorItemLabel "Empty choice")
 choice [p] = p
 choice (p : ps) = p <|> choice ps
 
-chunk :: (Stream t, Show t, Eq t) => t -> Parsec t t
+chunk :: (Stream t, Eq t) => t -> Parsec t t
 chunk t = Parser $ \s@(State r p se) -> case stripPrefix t r of
-  Nothing -> let err = ResultError (createError s (if streamNull r then ErrorEndOfInput else ErrorItemLabel ("Expected chunk " <> T.pack (show t)))) in (s, err)
+  Nothing -> let err = ResultError (createError s (if streamNull r then ErrorEndOfInput else ErrorItemExpected (S.singleton t))) in (s, err)
   Just r' -> (State r' (p + streamLength t) se, ResultOk t)

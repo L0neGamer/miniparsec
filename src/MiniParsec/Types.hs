@@ -20,9 +20,13 @@ import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as T
 
--- | The base type for a parser
+-- | The base type for a parser. 
+--
+-- A parser of type `Parsec t a` has a stream of type `t` and returns a value of
+-- type `a`.
 newtype Parsec t a = Parser {parse :: State t -> (State t, Result t a)}
 
+-- | The type for a state
 data State t = State {stateRemaining :: t, statePosition :: Integer, stateErrors :: [Error t]}
 
 data Result t a = ResultOk a | ResultError (Error t) deriving (Show, Eq)
