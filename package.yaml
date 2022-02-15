@@ -37,6 +37,8 @@ library:
   - TupleSections
   - MultiParamTypeClasses 
   - FlexibleContexts 
+  - TypeFamilies
+  - TypeApplications
 
 executables:
   miniparsec-exe:

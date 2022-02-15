@@ -6,13 +6,14 @@ import Control.Monad.Except (MonadError (catchError))
 import Debug.Trace (trace)
 import Lib
 import MiniParsec
+import Data.Text
 
 main :: IO ()
 main = do
   someFunc
   print (runParser example "aaacd")
 
-example :: ParserT (Char, Char, Char)
+example :: Parsec Text (Char, Char, Char)
 example = do
   _ <- char 'a'
   b <- anySingle
