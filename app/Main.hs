@@ -6,7 +6,7 @@ import Control.Monad.Except (MonadError (catchError))
 import Data.Text
 import Debug.Trace (trace)
 import Lib
-import MiniParsec
+import Miniparsec
 
 main :: IO ()
 main = do

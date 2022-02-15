@@ -1,4 +1,4 @@
-module MiniParsec.Types
+module Miniparsec.Types
   ( Parsec (Parser),
     State (..),
     Result (..),

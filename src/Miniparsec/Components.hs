@@ -1,9 +1,9 @@
-module MiniParsec.Components where
+module Miniparsec.Components where
 
 import Control.Applicative
 import Control.Monad.Except (MonadError (..))
 import qualified Data.Set as S
-import MiniParsec.Types
+import Miniparsec.Types
 
 -- | Get any token that matches the given boolean function.
 satisfy :: Stream t => (Token t -> Bool) -> Parsec t (Token t)
