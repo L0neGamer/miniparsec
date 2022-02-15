@@ -46,6 +46,7 @@ library
   ghc-options: -Wall
   build-depends:
       base >=4.7 && <5
+    , case-insensitive
     , containers
     , mtl
     , parser-combinators
@@ -61,6 +62,7 @@ executable miniparsec-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , case-insensitive
     , containers
     , miniparsec
     , mtl
@@ -78,6 +80,7 @@ test-suite miniparsec-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , case-insensitive
     , containers
     , miniparsec
     , mtl

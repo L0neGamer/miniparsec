@@ -2,6 +2,7 @@ module Miniparsec.Components where
 
 import Control.Applicative
 import Control.Monad.Except (MonadError (..))
+import Data.CaseInsensitive (FoldCase, mk)
 import qualified Data.Set as S
 import qualified Data.Text as T
 import Miniparsec.Types
@@ -25,7 +26,7 @@ single c = catchError (satisfy (== c)) catch
   where
     catch _ = throwError (ErrorItemExpected (S.singleton (toStream c)))
 
--- | Match a specific stream.
+-- | Match a specific given stream.
 chunk :: (Stream t, Eq t) => t -> Parsec t t
 chunk t = Parser $ \s@(State r p se) -> case takeNStream slt r of
   Nothing -> (s, err s)
@@ -57,6 +58,18 @@ anySingleBut t = satisfy (/= t)
 -- | Alias for `chunk`.
 string :: (Stream t, Eq t) => t -> Parsec t t
 string = chunk
+
+-- | Case insensitive version of `string`.
+string' :: (Stream t, FoldCase t, Eq t) => t -> Parsec t t
+string' t = Parser $ \s@(State r p se) -> case takeNStream slt r of
+  Nothing -> (s, err s)
+  Just (t', r') ->
+    if mk t == mk t'
+      then (State r' (p + slt) se, ResultOk t)
+      else (s, err s)
+  where
+    slt = streamLength t
+    err s = ResultError (createError s (ErrorItemExpected (S.singleton t)))
 
 -- | Parser for the end of the input.
 eof :: Stream t => Parsec t ()

@@ -25,6 +25,7 @@ dependencies:
 - containers
 - mtl
 - parser-combinators
+- case-insensitive
 
 library:
   source-dirs: src
