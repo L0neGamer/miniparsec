@@ -41,7 +41,3 @@ chunk t = Parser $ \s@(State r p se) -> case takeNStream slt r of
   where
     slt = streamLength t
     err s = ResultError (createError s (ErrorItemExpected (S.singleton t)))
-
---     case stripPrefix t r of
---   Nothing -> let err = ResultError (createError s (if streamNull r then ErrorEndOfInput else ErrorItemExpected (S.singleton t))) in (s, err)
---   Just r' -> (State r' (p + streamLength t) se, ResultOk t)
