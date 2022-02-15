@@ -24,6 +24,7 @@ dependencies:
 - text
 - containers
 - mtl
+- parser-combinators
 
 library:
   source-dirs: src

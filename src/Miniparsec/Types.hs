@@ -50,6 +50,10 @@ instance Functor (Result t) where
   fmap _ (ResultError e) = ResultError e
 
 -- | The type of one error item.
+--
+-- All error items bar `ErrorItemFail` can be used with (<|>), meaning that if
+-- `fail` is used it "breaks out" of parsing by and large. This is except for
+-- catching errors, where it is assumed the caller will handle all errors.
 data ErrorItem t
   = -- | The type for when one of a set of items is expected.
     ErrorItemExpected {errorItemExpectedItems :: Set t}
@@ -96,14 +100,6 @@ class Stream t where
 
   -- | Promote a single token to a stream.
   toStream :: Token t -> t
-
--- -- | Using `takeNStream` and `streamLength`, remove the given prefix from the
--- -- stream, and return `Just` the rest of the stream. If the prefix is not in
--- -- the stream, return `Nothing`
--- stripPrefix :: (Stream t, Eq t) => t -> t -> Maybe t
--- stripPrefix prefix t = case takeNStream (streamLength prefix) t of
---   Nothing -> Nothing
---   Just (prefix', t') -> if prefix' == prefix then Just t' else Nothing
 
 instance Stream Text where
   type Token Text = Char
@@ -179,7 +175,7 @@ instance MonadState (State t) (Parsec t) where
 --
 -- Error is `ErrorItemLabel "Empty parser"`.
 emptyParser :: Parsec t a
-emptyParser = Parser $ \s -> (s, ResultError $ createError s (ErrorItemLabel "Empty parser"))
+emptyParser = throwError (ErrorItemLabel "Empty parser")
 
 -- | Run a given parser, either returning the errors (in reverse order of when
 -- they were encountered) or a parsed  value.
