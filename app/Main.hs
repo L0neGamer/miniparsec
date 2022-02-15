@@ -3,10 +3,10 @@
 module Main where
 
 import Control.Monad.Except (MonadError (catchError))
+import Data.Text
 import Debug.Trace (trace)
 import Lib
 import MiniParsec
-import Data.Text
 
 main :: IO ()
 main = do

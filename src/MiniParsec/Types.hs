@@ -1,13 +1,13 @@
 module MiniParsec.Types
-  ( Parsec(Parser),
+  ( Parsec (Parser),
     State (..),
     Result (..),
-    Error(..),
-    ErrorItem(..),
+    Error (..),
+    ErrorItem (..),
     Stream (..),
     emptyParser,
     runParser,
-    createError
+    createError,
   )
 where
 
@@ -20,7 +20,7 @@ import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as T
 
--- | The base type for a parser. 
+-- | The base type for a parser.
 --
 -- A parser of type `Parsec t a` has a stream of type `t` and returns a value of
 -- type `a`.
