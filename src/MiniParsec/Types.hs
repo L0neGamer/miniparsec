@@ -16,6 +16,7 @@ import Control.Monad.Except (MonadError (..))
 import Control.Monad.State (MonadState (..))
 import Data.Bifunctor
 import Data.Kind (Type)
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Set (Set)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -26,34 +27,83 @@ import qualified Data.Text as T
 -- type `a`.
 newtype Parsec t a = Parser {parse :: State t -> (State t, Result t a)}
 
--- | The type for a state
-data State t = State {stateRemaining :: t, statePosition :: Integer, stateErrors :: [Error t]}
+-- | The type for the state of the parser.
+data State t = State
+  { -- | The stream remaining.
+    stateRemaining :: t,
+    -- | The position in the stream.
+    statePosition :: Integer,
+    -- | Errors that have been collected and ignored.
+    stateErrors :: [Error t]
+  }
 
-data Result t a = ResultOk a | ResultError (Error t) deriving (Show, Eq)
+-- | The type for the result value of parsing.
+data Result t a
+  = -- | Parsing succeeded.
+    ResultOk a
+  | -- | Parsing errored.
+    ResultError (Error t)
+  deriving (Show, Eq)
 
 instance Functor (Result t) where
   fmap f (ResultOk a) = ResultOk (f a)
   fmap _ (ResultError e) = ResultError e
 
-data ErrorItem t = ErrorItemExpected {errorItemExpectedItems :: Set t} | ErrorItemLabel {errorItemLabel :: Text} | ErrorEndOfInput | ErrorItemFail {errorItemFail :: Text}
+-- | The type of one error item.
+data ErrorItem t
+  = -- | The type for when one of a set of items is expected.
+    ErrorItemExpected {errorItemExpectedItems :: Set t}
+  | -- | The type for naming an error.
+    ErrorItemLabel {errorItemLabel :: Text}
+  | -- | The type for when end of input is encountered.
+    ErrorEndOfInput
+  | -- | The type for an error that won't be (<|>)'d. Used in `MonadFail`
+    -- instance.
+    ErrorItemFail {errorItemFail :: Text}
   deriving (Show, Eq)
 
+-- | The type of an error. Has an `ErrorItem` and the position of the error.
 data Error t = Error {errorPosition :: Integer, errorItem :: ErrorItem t}
   deriving (Show, Eq)
 
+-- | Type class for streams of tokens. This allows certain parser components to
+-- be generalised.
+--
+-- Instances are provided for `Text` and `[a]`.
 class Stream t where
+  -- | The type of a single token in this stream.
   type Token t :: Type
+
+  -- | How many tokens left in the stream.
+  --
+  -- For infinite streams this won't terminate.
   streamLength :: t -> Integer
+
+  -- | Whether there are any items left in the stream.
+  --
+  -- Defined using `streamLength`, but individual streams may want to define
+  -- their own, more efficient versions.
   streamNull :: t -> Bool
   streamNull ts = 0 == streamLength ts
-  takeNStream :: Integer -> t -> Maybe (t, t)
+
+  -- | If the stream is not empty, return `Just` the first element of the stream
+  -- and  the rest of the stream. If the stream is empty, return `Nothing`.
   take1Stream :: t -> Maybe (Token t, t)
+
+  -- | If the stream has at least `n` tokens, return `Just` the first `n` tokens
+  -- and the rest of the stream. Otherwise, return `Nothing`.
+  takeNStream :: Integer -> t -> Maybe (t, t)
+
+  -- | Promote a single token to a stream.
   toStream :: Token t -> t
 
-  stripPrefix :: (Stream t, Eq t) => t -> t -> Maybe t
-  stripPrefix prefix t = case takeNStream (streamLength prefix) t of
-    Nothing -> Nothing
-    Just (prefix', t') -> if prefix' == prefix then Just t' else Nothing
+-- -- | Using `takeNStream` and `streamLength`, remove the given prefix from the
+-- -- stream, and return `Just` the rest of the stream. If the prefix is not in
+-- -- the stream, return `Nothing`
+-- stripPrefix :: (Stream t, Eq t) => t -> t -> Maybe t
+-- stripPrefix prefix t = case takeNStream (streamLength prefix) t of
+--   Nothing -> Nothing
+--   Just (prefix', t') -> if prefix' == prefix then Just t' else Nothing
 
 instance Stream Text where
   type Token Text = Char
@@ -95,16 +145,15 @@ instance Monad (Parsec t) where
   return = pure
   (Parser p) >>= f = Parser $ \s -> case p s of
     (s', ResultError e) -> (s', ResultError e)
-    (s', ResultOk a) -> case f a of
-      Parser p' -> p' s'
+    (s', ResultOk a) -> parse (f a) s'
 
 instance MonadFail (Parsec t) where
   fail fs = Parser $ \s -> (s, ResultError $ createError s (ErrorItemFail (T.pack fs)))
 
 instance Semigroup a => Semigroup (Parsec t a) where
   (<>) (Parser p) (Parser p') = Parser $ \s -> case p s of
-    (s', ResultError e) -> (s', ResultError e)
     (s', ResultOk a) -> second ((a <>) <$>) (p' s')
+    err -> err
 
 instance Monoid a => Monoid (Parsec t a) where
   mempty = emptyParser
@@ -112,27 +161,37 @@ instance Monoid a => Monoid (Parsec t a) where
 instance Alternative (Parsec t) where
   empty = emptyParser
   (<|>) (Parser p) (Parser p') = Parser $ \s -> case p s of
-    ok@(_, ResultOk _) -> ok
     err@(_, ResultError (Error _ (ErrorItemFail _))) -> err
-    (_, ResultError e) -> first (\s' -> s' {stateErrors = e : stateErrors s}) (p' s)
+    (_, ResultError e) -> p' (s {stateErrors = e : stateErrors s})
+    ok -> ok
 
 instance MonadError (ErrorItem t) (Parsec t) where
   throwError ei = Parser $ \s -> (s, ResultError $ createError s ei)
   catchError (Parser p) f = Parser $ \s -> case p s of
-    ok@(_, ResultOk _) -> ok
     (_, ResultError e@(Error _ ei)) -> parse (f ei) (s {stateErrors = e : stateErrors s})
+    ok -> ok
 
 instance MonadState (State t) (Parsec t) where
   get = Parser $ \s -> (s, ResultOk s)
   put s = Parser $ const (s, ResultOk ())
 
+-- | A parser that errors without consuming any input.
+--
+-- Error is `ErrorItemLabel "Empty parser"`.
 emptyParser :: Parsec t a
 emptyParser = Parser $ \s -> (s, ResultError $ createError s (ErrorItemLabel "Empty parser"))
 
-runParser :: forall t a. Stream t => Parsec t a -> t -> Either (Error t) a
+-- | Run a given parser, either returning the errors (in reverse order of when
+-- they were encountered) or a parsed  value.
+runParser :: forall t a. Stream t => Parsec t a -> t -> Either (NonEmpty (Error t)) a
 runParser p t = case parse p (State t 0 []) of
-  (s, ResultOk a) -> if streamNull (stateRemaining s) then Right a else Left (Error (statePosition s) (ErrorItemLabel "Expected end of input"))
-  (_, ResultError e) -> Left e
+  (s, ResultOk a) ->
+    if streamNull (stateRemaining s)
+      then Right a
+      else Left (createError s (ErrorItemLabel "Expected end of input") :| stateErrors s)
+  (s, ResultError e) -> Left (e :| stateErrors s)
 
+-- | Create an error when given a state and the `ErrorItem` to make an error
+-- from.
 createError :: State t -> ErrorItem t -> Error t
 createError s = Error (statePosition s)
