@@ -41,18 +41,6 @@ chunk t = Parser $ \s@(State r p se) -> case takeNStream slt r of
 char :: (Stream t, Eq (Token t)) => Token t -> Parsec t (Token t)
 char = single
 
--- -- | Alias for `Data.Functor.void`.
--- skip :: Parsec t a -> Parsec t ()
--- skip = void
-
--- -- | Alias for `skip . many`.
--- skipMany :: Parsec t a -> Parsec t ()
--- skipMany = skip . many
-
--- -- | Alias for `skip . some`.
--- skipSome :: Parsec t a -> Parsec t ()
--- skipSome = skip . some
-
 -- | Replace the error in a parser with a label error. If the error in the
 -- parser is from `fail`, this label will not apply.
 label :: Parsec t a -> T.Text -> Parsec t a
@@ -62,5 +50,16 @@ label p t = p <|> throwError (ErrorItemLabel t)
 (<?>) :: Parsec t a -> T.Text -> Parsec t a
 (<?>) = label
 
--- anySingleBut :: (Stream t, Eq (Token t)) => Token t -> Parsec t (Token t)
--- anySingleBut t = satisfy (/= t)
+-- | Match any single token except the given token.
+anySingleBut :: (Stream t, Eq (Token t)) => Token t -> Parsec t (Token t)
+anySingleBut t = satisfy (/= t)
+
+-- | Alias for `chunk`.
+string :: (Stream t, Eq t) => t -> Parsec t t
+string = chunk
+
+-- | Parser for the end of the input.
+eof :: Stream t => Parsec t ()
+eof = Parser $ \s@(State t _ _) -> case take1Stream t of
+  Nothing -> (s, ResultOk ())
+  _ -> (s, ResultError (createError s (ErrorItemLabel "expected eof")))
