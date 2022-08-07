@@ -10,11 +10,11 @@ import Miniparsec.Types
 -- | Get any token that matches the given boolean function.
 satisfy :: Stream t => (Token t -> Bool) -> Parsec t (Token t)
 satisfy f = Parser $ \s@(State r p se) -> case take1Stream r of
-  Nothing -> (s, ResultError $ createError s ErrorEndOfInput)
+  Nothing -> (s, ResultError $ createError' s ErrorEndOfInput)
   Just (c', r') ->
     if f c'
       then (State r' (p + 1) se, ResultOk c')
-      else (s, ResultError $ createError s (ErrorItemLabel "Item did not match function"))
+      else (s, ResultError $ createError' s (ErrorItemLabel "Item did not match function"))
 
 -- | Get any token.
 anySingle :: Stream t => Parsec t (Token t)
@@ -36,7 +36,7 @@ chunk t = Parser $ \s@(State r p se) -> case takeNStream slt r of
       else (s, err s)
   where
     slt = streamLength t
-    err s = ResultError (createError s (ErrorItemExpected (S.singleton t)))
+    err s = ResultError (createError s slt (ErrorItemExpected (S.singleton t)))
 
 -- | Alias for `single`.
 char :: (Stream t, Eq (Token t)) => Token t -> Parsec t (Token t)
@@ -69,15 +69,15 @@ string' t = Parser $ \s@(State r p se) -> case takeNStream slt r of
       else (s, err s)
   where
     slt = streamLength t
-    err s = ResultError (createError s (ErrorItemExpected (S.singleton t)))
+    err s = ResultError (createError s slt (ErrorItemExpected (S.singleton t)))
 
 -- | Parser for the end of the input.
 eof :: Stream t => Parsec t ()
 eof = Parser $ \s@(State t _ _) -> case take1Stream t of
   Nothing -> (s, ResultOk ())
-  _ -> (s, ResultError (createError s (ErrorItemLabel "expected eof")))
+  _ -> (s, ResultError (createError' s (ErrorItemLabel "expected eof")))
 
 observing :: Stream t => Parsec t a -> Parsec t (Either (ErrorItem t) a)
 observing p = Parser $ \s -> case parse p s of
   (s', ResultOk a) -> (s', ResultOk (Right a))
-  (s', ResultError (Error _ ei)) -> (s', ResultOk (Left ei))
+  (s', ResultError (Error _ _ ei)) -> (s', ResultOk (Left ei))

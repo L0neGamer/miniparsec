@@ -28,6 +28,8 @@ library
       Lib
       Miniparsec
       Miniparsec.Components
+      Miniparsec.Error
+      Miniparsec.Stream
       Miniparsec.Types
   other-modules:
       Paths_miniparsec
