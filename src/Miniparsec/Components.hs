@@ -1,5 +1,6 @@
 module Miniparsec.Components
-  ( satisfy,
+  ( -- * Various utility functions so that parsing is easier
+    satisfy,
     anySingle,
     single,
     chunk,
@@ -24,8 +25,8 @@ import Miniparsec.Types
 -- | Get any token that matches the given boolean function.
 satisfy :: Stream t => (Token t -> Bool) -> Parsec t e (Token t)
 satisfy f = Parser $ \s -> case incrementState s of
-  Left _ -> throwErrorWarning ErrorEndOfInput `parse` s
-  Right (c', s') ->
+  Nothing -> throwErrorWarning ErrorEndOfInput `parse` s
+  Just (c', s') ->
     if f c'
       then (s', ResultOk c')
       else throwErrorWarning (ErrorLabel "Item did not match function") `parse` s
@@ -41,8 +42,8 @@ single c = replaceError (satisfy (== c)) (ErrorExpected (NE.singleton (toStream 
 -- | Match a specific given stream.
 chunk :: (Stream t, Eq t) => t -> Parsec t e t
 chunk t = Parser $ \s -> case increaseState slt s of
-  Left _ -> err s
-  Right (t', s') ->
+  Nothing -> err s
+  Just (t', s') ->
     if t == t'
       then (s', ResultOk t)
       else err s
@@ -74,8 +75,8 @@ string = chunk
 -- | Case insensitive version of `string`.
 string' :: (Stream t, FoldCase t, Eq t) => t -> Parsec t e t
 string' t = Parser $ \s -> case increaseState slt s of
-  Left _ -> err s
-  Right (t', s') ->
+  Nothing -> err s
+  Just (t', s') ->
     if mk t == mk t'
       then (s', ResultOk t)
       else err s

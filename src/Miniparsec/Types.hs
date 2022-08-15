@@ -50,15 +50,13 @@ data State t e = State
     stateErrors :: [Error t e]
   }
 
-incrementState :: Stream t => State t e -> Either () (Token t, State t e)
-incrementState (State s p es) = case take1Stream s of
-  Nothing -> Left ()
-  Just (t, s') -> Right (t, State s' (p + 1) es)
+-- | Process one token from the stream.
+incrementState :: Stream t => State t e -> Maybe (Token t, State t e)
+incrementState (State s p es) = second (\s' -> State s' (p + 1) es) <$> take1Stream s
 
-increaseState :: Stream t => Natural -> State t e -> Either () (t, State t e)
-increaseState n (State s p es) = case takeNStream (max 0 n) s of
-  Nothing -> Left ()
-  Just (t, s') -> Right (t, State s' (p + n) es)
+-- | Process `n` tokens from the stream.
+increaseState :: Stream t => Natural -> State t e -> Maybe (t, State t e)
+increaseState n (State s p es) = second (\s' -> State s' (p + n) es) <$> takeNStream n s
 
 -- | The type for the result value of parsing.
 data Result t e a
@@ -158,6 +156,8 @@ runParserGetBundle p t = case parse p (State t 0 []) of
       else Left (ErrorBundle t (createError @Integer s 1 ErrorException (ErrorLabel "expected end of input") :| stateErrors s))
   (s, ResultError e) -> Left $ ErrorBundle t (e :| stateErrors s)
 
+-- | Create an Error when given a `State`, the length of the error, the type of
+-- the error, and the error value.
 createError :: Integral i => State t e -> i -> ErrorType -> ErrorItem t e -> Error t e
 createError s el = Error (statePosition s) (mkNatOne $ toInteger el)
 
