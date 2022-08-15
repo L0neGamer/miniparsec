@@ -20,6 +20,8 @@ import Control.Monad.Except (MonadError (..))
 import Data.CaseInsensitive (FoldCase, mk)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
+import Miniparsec.Error
+import Miniparsec.Stream
 import Miniparsec.Types
 
 -- | Get any token that matches the given boolean function.

@@ -14,9 +14,10 @@ module Miniparsec.Types
 
     -- * Error handling and creation
 
-    -- | Re-exports from `Miniparsec.Error`
-    module Miniparsec.Error,
-    -- | Other useful error utilities
+    -- | Useful error utilities
+    try,
+    toException,
+    toWarning,
     createError,
     throwErrorTypeAndLength,
     throwErrorWithType,
@@ -24,8 +25,6 @@ module Miniparsec.Types
     throwErrorException,
     replaceWithError,
     replaceError,
-    -- | Re-exports from `MiniParsec.Stream`
-    module Miniparsec.Stream,
   )
 where
 
@@ -189,3 +188,21 @@ replaceWithError (Parser p) fei = Parser $ \s -> case p s of
 -- | If the given parser is erroring, change the error to the given error.
 replaceError :: Parsec t e a -> ErrorItem t e -> Parsec t e a
 replaceError p ei = replaceWithError p $ const ei
+
+-- | If the parser is in an error state, make the error an exception (and thus
+-- has to be caught manually).
+toException :: Parsec t e a -> Parsec t e a
+toException (Parser p) = Parser $ \s -> case p s of
+  (s', ResultError e) -> (s', ResultError $ e {errorType = ErrorException})
+  ok -> ok
+
+-- | If the parser is in an error state, make the error an warning (and thus
+-- doesn't have to be caught manually).
+toWarning :: Parsec t e a -> Parsec t e a
+toWarning (Parser p) = Parser $ \s -> case p s of
+  (s', ResultError e) -> (s', ResultError $ e {errorType = ErrorWarning})
+  ok -> ok
+
+-- | Alias of `toWarning`, makes any errors warnings instead of exceptions.
+try :: Parsec t e a -> Parsec t e a
+try = toWarning
