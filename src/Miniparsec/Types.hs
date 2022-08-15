@@ -1,119 +1,208 @@
 module Miniparsec.Types
-  ( Parsec (..),
-    State (..),
-    Result (..),
-    Error (..),
-    ErrorItem (..),
-    Stream (..),
+  ( -- * Parser basics
+    Parsec (..),
     emptyParser,
     runParser,
+    runParserGetBundle,
+    -- | Result type
+    Result (..),
+
+    -- * Observing and maniplating state
+    State (..),
+    incrementState,
+    increaseState,
+
+    -- * Error handling and creation
+
+    -- | Useful error utilities
+    try,
+    toException,
+    toWarning,
     createError,
-    createError',
+    throwErrorTypeAndLength,
+    throwErrorWithType,
+    throwErrorWarning,
+    throwErrorException,
+    replaceWithError,
+    replaceError,
   )
 where
 
 import Control.Applicative
-import Control.Monad.Except (MonadError (..))
+import Control.Monad.Except (MonadError (..), MonadPlus (..))
 import Control.Monad.State (MonadState (..))
 import Data.Bifunctor
 import Data.List.NonEmpty (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import Miniparsec.Error
 import Miniparsec.Stream
-
--- | The base type for a parser.
---
--- A parser of type `Parsec t a` has a stream of type `t` and returns a value of
--- type `a`.
-newtype Parsec t a = Parser {parse :: State t -> (State t, Result t a)}
+import Numeric.Natural
 
 -- | The type for the state of the parser.
-data State t = State
+data State t e = State
   { -- | The stream remaining.
-    stateRemaining :: t,
+    stateRemaining :: Stream t => t,
     -- | The position in the stream.
-    statePosition :: Integer,
+    statePosition :: !Natural,
     -- | Errors that have been collected and ignored.
-    stateErrors :: [Error t]
+    stateErrors :: [Error t e]
   }
 
+-- | Process one token from the stream.
+incrementState :: Stream t => State t e -> Maybe (Token t, State t e)
+incrementState (State s p es) = second (\s' -> State s' (p + 1) es) <$> uncons s
+
+-- | Process `n` tokens from the stream.
+increaseState :: Stream t => Natural -> State t e -> Maybe (t, State t e)
+increaseState n (State s p es) = second (\s' -> State s' (p + n) es) <$> takeNStream n s
+
 -- | The type for the result value of parsing.
-data Result t a
+data Result t e a
   = -- | Parsing succeeded.
     ResultOk a
-  | -- | Parsing errored.
-    ResultError (Error t)
+  | -- | Parsing errored and the error was uncaught.
+    ResultError (Error t e)
   deriving (Show, Eq)
 
-instance Functor (Result t) where
+instance Functor (Result t e) where
   fmap f (ResultOk a) = ResultOk (f a)
   fmap _ (ResultError e) = ResultError e
 
-instance Functor (Parsec t) where
+-- | The base type for a parser.
+--
+-- A parser of type `Parsec t e a` has a stream of type `t`, a user-supplied
+-- error type `e` and returns a value of type `a`.
+newtype Parsec t e a = Parser {parse :: State t e -> (State t e, Result t e a)}
+
+-- | Changes the return value of the parser.
+instance Functor (Parsec t e) where
   fmap f (Parser p) = Parser (second (fmap f) . p)
 
-instance Applicative (Parsec t) where
+-- | Manipulate parsers and pass on state.
+instance Applicative (Parsec t e) where
   (<*>) (Parser p) (Parser p') = Parser $ \s -> case p s of
     (s', ResultError e) -> (s', ResultError e)
     (s', ResultOk f) -> second (f <$>) $ p' s'
   pure a = Parser (,ResultOk a)
 
-instance Monad (Parsec t) where
-  return = pure
+-- | Attempty to continue computation of a parser.
+instance Monad (Parsec t e) where
   (Parser p) >>= f = Parser $ \s -> case p s of
     (s', ResultError e) -> (s', ResultError e)
     (s', ResultOk a) -> parse (f a) s'
 
-instance MonadFail (Parsec t) where
-  fail fs = Parser $ \s -> (s, ResultError $ createError' s (ErrorItemFail (T.pack fs)))
+-- | Create a labelled failure message using `ErrorWarning`.
+instance MonadFail (Parsec t e) where
+  fail fs = throwErrorWarning (ErrorLabel (T.pack fs))
 
-instance Semigroup a => Semigroup (Parsec t a) where
+-- | Combine the outputs of two parsers.
+instance Semigroup a => Semigroup (Parsec t e a) where
   (<>) (Parser p) (Parser p') = Parser $ \s -> case p s of
     (s', ResultOk a) -> second ((a <>) <$>) (p' s')
     err -> err
 
-instance Monoid a => Monoid (Parsec t a) where
-  mempty = emptyParser
+-- | Produce a trivial parser for the empty value.
+instance Monoid a => Monoid (Parsec t e a) where
+  mempty = pure mempty
 
-instance Alternative (Parsec t) where
+-- | Try an alternative parser if the first produces an `ErrorWarning`.
+instance Alternative (Parsec t e) where
   empty = emptyParser
   (<|>) (Parser p) (Parser p') = Parser $ \s -> case p s of
-    err@(_, ResultError (Error _ _ (ErrorItemFail _))) -> err
+    err@(_, ResultError (Error _ _ ErrorException _)) -> err
     (_, ResultError e) -> p' (s {stateErrors = e : stateErrors s})
     ok -> ok
 
-instance MonadError (ErrorItem t) (Parsec t) where
-  throwError ei = Parser $ \s -> (s, ResultError $ createError' s ei)
+-- | Let people throw their own errors if they choose; useful for internals too.
+instance MonadError (ErrorItem t e) (Parsec t e) where
+  throwError = throwErrorException
   catchError (Parser p) f = Parser $ \s -> case p s of
-    (_, ResultError e@(Error _ _ ei)) -> parse (f ei) (s {stateErrors = e : stateErrors s})
+    (_, ResultError e@(Error _ _ _ ei)) -> parse (f ei) (s {stateErrors = e : stateErrors s})
     ok -> ok
 
-instance MonadState (State t) (Parsec t) where
+-- | Let users manipulate the parser state if they choose. Not recommended, but
+-- available.
+instance MonadState (State t e) (Parsec t e) where
   get = Parser $ \s -> (s, ResultOk s)
   put s = Parser $ const (s, ResultOk ())
 
+-- | Just `Alternative`.
+--
+-- Think of `ErrorWarning`s as zero values and `ErrorException` values as `nan`,
+-- in that you have to explicitly handle `ErrorException`.
+instance MonadPlus (Parsec t e) where
+  mzero = empty
+
 -- | A parser that errors without consuming any input.
 --
--- Error is `ErrorItemLabel "Empty parser"`.
-emptyParser :: Parsec t a
-emptyParser = throwError (ErrorItemLabel "Empty parser")
+-- Error is `ErrorLabel ""`.
+emptyParser :: Parsec t e a
+emptyParser = throwErrorWarning (ErrorLabel "")
 
 -- | Run a given parser, either returning the errors (in reverse order of when
--- they were encountered) or a parsed  value.
-runParser :: forall t a. Stream t => Parsec t a -> t -> Either (ErrorBundle t) a
-runParser p t = case parse p (State t 0 []) of
+-- they were encountered) or a parsed value.
+runParser :: forall t e a. Stream t => Parsec t e a -> t -> Either (ErrorBundle t e) a
+runParser p = fmap fst . runParserGetBundle p
+
+-- | Run a given parser, either returning the errors (in reverse order of when
+-- they were encountered) or a parsed value and a bundle of errors encountered and ignored.
+runParserGetBundle :: forall t e a. Stream t => Parsec t e a -> t -> Either (ErrorBundle t e) (a, Maybe (ErrorBundle t e))
+runParserGetBundle p t = case parse p (State t 0 []) of
   (s, ResultOk a) ->
     if streamNull (stateRemaining s)
-      then Right a
-      else Left (ErrorBundle t (createError' s (ErrorItemLabel "Expected end of input") :| stateErrors s))
+      then Right (a, ErrorBundle t <$> NE.nonEmpty (stateErrors s))
+      else Left (ErrorBundle t (createError @Integer s 1 ErrorException (ErrorLabel "expected end of input") :| stateErrors s))
   (s, ResultError e) -> Left $ ErrorBundle t (e :| stateErrors s)
 
--- | Create an error when given a state and the `ErrorItem` to make an error
--- from. Sets the length of the error to 1.
-createError' :: State t -> ErrorItem t -> Error t
-createError' s = Error (statePosition s) 1
+-- | Create an Error when given a `State`, the length of the error, the type of
+-- the error, and the error value.
+createError :: Integral i => State t e -> i -> ErrorType -> ErrorItem t e -> Error t e
+createError s el = Error (statePosition s) (mkNatOne $ toInteger el)
 
--- | Create an error when given a state and the `ErrorItem` to make an error
--- from. Sets the length of the error to the given number.
-createError :: State t -> Integer -> ErrorItem t -> Error t
-createError s i ei = (createError' s ei) {errorLength = i}
+-- | Throw an error, giving the length of the parser error, whether it's a
+-- warning or an exception, and the ErrorItem itself.
+throwErrorTypeAndLength :: forall i t e a. Integral i => i -> ErrorType -> ErrorItem t e -> Parsec t e a
+throwErrorTypeAndLength len etype eitem = Parser $ \s -> (s, ResultError $ createError s len etype eitem)
+
+-- | Throw an error, assuming that the error has length one. The error type is
+-- also given.
+throwErrorWithType :: ErrorType -> ErrorItem t e -> Parsec t e a
+throwErrorWithType = throwErrorTypeAndLength @Integer 1
+
+-- | Throw a warning error with length 1.
+throwErrorWarning :: ErrorItem t e -> Parsec t e a
+throwErrorWarning = throwErrorWithType ErrorWarning
+
+-- | Throw an exception error with length 1.
+throwErrorException :: ErrorItem t e -> Parsec t e a
+throwErrorException = throwErrorWithType ErrorException
+
+-- | If the given parser is erroring, change the error based on the function
+-- given.
+replaceWithError :: Parsec t e a -> (ErrorItem t e -> ErrorItem t e) -> Parsec t e a
+replaceWithError (Parser p) fei = Parser $ \s -> case p s of
+  (s', ResultError (Error eo el et ei)) -> (s', ResultError (Error eo el et (fei ei)))
+  ok -> ok
+
+-- | If the given parser is erroring, change the error to the given error.
+replaceError :: Parsec t e a -> ErrorItem t e -> Parsec t e a
+replaceError p ei = replaceWithError p $ const ei
+
+-- | If the parser is in an error state, make the error an exception (and thus
+-- has to be caught manually).
+toException :: Parsec t e a -> Parsec t e a
+toException (Parser p) = Parser $ \s -> case p s of
+  (s', ResultError e) -> (s', ResultError $ e {errorType = ErrorException})
+  ok -> ok
+
+-- | If the parser is in an error state, make the error an warning (and thus
+-- doesn't have to be caught manually).
+toWarning :: Parsec t e a -> Parsec t e a
+toWarning (Parser p) = Parser $ \s -> case p s of
+  (s', ResultError e) -> (s', ResultError $ e {errorType = ErrorWarning})
+  ok -> ok
+
+-- | Alias of `toWarning`, makes any errors warnings instead of exceptions.
+try :: Parsec t e a -> Parsec t e a
+try = toWarning

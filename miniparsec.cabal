@@ -45,6 +45,11 @@ library
       FlexibleContexts
       TypeFamilies
       TypeApplications
+      LambdaCase
+      ScopedTypeVariables
+      DerivingStrategies
+      GeneralizedNewtypeDeriving
+      StandaloneDeriving
   ghc-options: -Wall
   build-depends:
       base >=4.7 && <5
@@ -52,6 +57,7 @@ library
     , containers
     , mtl
     , parser-combinators
+    , safe
     , text
   default-language: Haskell2010
 
@@ -69,6 +75,7 @@ executable miniparsec-exe
     , miniparsec
     , mtl
     , parser-combinators
+    , safe
     , text
   default-language: Haskell2010
 
@@ -87,5 +94,6 @@ test-suite miniparsec-test
     , miniparsec
     , mtl
     , parser-combinators
+    , safe
     , text
   default-language: Haskell2010

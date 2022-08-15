@@ -26,6 +26,7 @@ dependencies:
 - mtl
 - parser-combinators
 - case-insensitive
+- safe
 
 library:
   source-dirs: src
@@ -41,6 +42,11 @@ library:
   - FlexibleContexts 
   - TypeFamilies
   - TypeApplications
+  - LambdaCase
+  - ScopedTypeVariables
+  - DerivingStrategies
+  - GeneralizedNewtypeDeriving
+  - StandaloneDeriving
 
 executables:
   miniparsec-exe:
