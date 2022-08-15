@@ -125,5 +125,5 @@ errorBundlePretty eb = header <> result <> errorItemPretty ei
 errorItemPretty :: (TraversableStream t, Show e) => ErrorItem t e -> T.Text
 errorItemPretty ErrorEndOfInput = "encountered end of input when more input was expected"
 errorItemPretty (ErrorLabel l) = l
-errorItemPretty (ErrorExpected s) = "expected one of: " <> T.intercalate ", " (toText <$> NE.toList s)
+errorItemPretty (ErrorExpected s) = "expected one of: " <> T.intercalate ", " (T.pack . show . toText <$> NE.toList s)
 errorItemPretty (ErrorCustom e) = T.pack $ show e
