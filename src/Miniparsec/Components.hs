@@ -31,13 +31,13 @@ satisfy f = Parser $ \s -> case incrementState s of
   Just (c', s') ->
     if f c'
       then (s', ResultOk c')
-      else throwErrorWarning (ErrorLabel "Item did not match function") `parse` s
+      else throwErrorWarning (ErrorLabel "token did not match predicate") `parse` s
 
 -- | Get any token.
 anySingle :: Stream t => Parsec t e (Token t)
 anySingle = satisfy (const True) -- can only throw ErrorEndOfInput
 
--- | Match a single token.
+-- | Match a single, specific token.
 single :: (Stream t, Eq (Token t)) => Token t -> Parsec t e (Token t)
 single c = replaceError (satisfy (== c)) (ErrorExpected (NE.singleton (toStream c)))
 
@@ -92,6 +92,8 @@ eof = Parser $ \s@(State t _ _) -> case uncons t of
   Nothing -> (s, ResultOk ())
   _ -> parse (throwErrorWarning ErrorEndOfInput) s
 
+-- | Capture the error state if it exists and return either the value or the
+-- error.
 observing :: Stream t => Parsec t e a -> Parsec t e (Either (ErrorItem t e) a)
 observing p = Parser $ \s -> case parse p s of
   (s', ResultOk a) -> (s', ResultOk (Right a))
