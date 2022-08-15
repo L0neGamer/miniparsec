@@ -1,9 +1,15 @@
-module Miniparsec.Stream where
+module Miniparsec.Stream
+  ( Stream (..),
+    StreamLocation (..),
+    TraversableStream (..),
+  )
+where
 
 import Data.Kind (Type)
 import Data.List
 import Data.Text (Text)
 import qualified Data.Text as T
+import Numeric.Natural
 
 -- | Type class for streams of tokens. This allows certain parser components to
 -- be generalised.
@@ -16,7 +22,7 @@ class Stream t where
   -- | How many tokens left in the stream.
   --
   -- For infinite streams this won't terminate.
-  streamLength :: t -> Integer
+  streamLength :: t -> Natural
 
   -- | Whether there are any items left in the stream.
   --
@@ -31,7 +37,7 @@ class Stream t where
 
   -- | If the stream has at least `n` tokens, return `Just` the first `n` tokens
   -- and the rest of the stream. Otherwise, return `Nothing`.
-  takeNStream :: Integer -> t -> Maybe (t, t)
+  takeNStream :: Natural -> t -> Maybe (t, t)
 
   -- | Promote a single token to a stream.
   toStream :: Token t -> t
@@ -63,10 +69,10 @@ instance Stream [a] where
       took = take i' t
   toStream a = [a]
 
-data StreamLocation = StreamLocation {lineNumber :: Integer, columnNumber :: Integer} deriving (Show)
+data StreamLocation = StreamLocation {lineNumber :: Natural, columnNumber :: Natural} deriving (Show)
 
 class Stream t => TraversableStream t where
-  reachOffset :: Integer -> t -> (Text, StreamLocation)
+  reachOffset :: Natural -> t -> (Text, StreamLocation)
   toText :: t -> Text
 
 instance TraversableStream Text where
@@ -77,15 +83,15 @@ instance TraversableStream String where
   reachOffset = reachOffset' foldl'
   toText = T.pack
 
-reachOffset' :: Stream t => (forall a. (a -> Char -> a) -> a -> t -> a) -> Integer -> t -> (Text, StreamLocation)
-reachOffset' folder i t = (line, sl)
+reachOffset' :: Stream t => (forall a. (a -> Char -> a) -> a -> t -> a) -> Natural -> t -> (Text, StreamLocation)
+reachOffset' folder nat t = (line, sl)
   where
-    f b@(i', _, _) _ | i' < 0 = b
-    f (0, sl', line') '\n' = (-1, sl', line')
-    f (1, sl', line') '\n' = (-1, nextCol sl', line')
-    f (0, sl', line') c = (0, sl', line' <> T.singleton c)
-    f (i', sl', _) '\n' = (i' - 1, nextLine sl', "")
-    f (i', sl', p) c = (i' - 1, nextCol sl', p <> T.singleton c)
+    f b@(Nothing, _, _) _ = b -- end of offset
+    f (Just 0, sl', line') '\n' = (Nothing, sl', line') -- end of offset on new line
+    f (Just 1, sl', line') '\n' = (Nothing, nextCol sl', line') -- newline will be end of offset
+    f (Just 0, sl', line') c = (Just 0, sl', line' <> T.singleton c) -- current character is end of offset
+    f (Just i', sl', _) '\n' = (Just (i' - 1), nextLine sl', "") -- go to next line
+    f (Just i', sl', p) c = (Just (i' - 1), nextCol sl', p <> T.singleton c) -- go to next character
     nextLine (StreamLocation ln _) = StreamLocation (ln + 1) 0
     nextCol (StreamLocation ln cn) = StreamLocation ln (cn + 1)
-    (_, sl, line) = folder f (i, StreamLocation 0 0, "") t
+    (_, sl, line) = folder f (Just nat, StreamLocation 0 0, "") t
