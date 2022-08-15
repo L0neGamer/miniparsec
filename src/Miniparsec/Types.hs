@@ -154,7 +154,7 @@ runParserGetBundle :: forall t e a. Stream t => Parsec t e a -> t -> Either (Err
 runParserGetBundle p t = case parse p (State t 0 []) of
   (s, ResultOk a) ->
     if streamNull (stateRemaining s)
-      then Right (a, fmap (ErrorBundle t) $ NE.nonEmpty (stateErrors s))
+      then Right (a, ErrorBundle t <$> NE.nonEmpty (stateErrors s))
       else Left (ErrorBundle t (createError @Integer s 1 ErrorException (ErrorLabel "expected end of input") :| stateErrors s))
   (s, ResultError e) -> Left $ ErrorBundle t (e :| stateErrors s)
 
