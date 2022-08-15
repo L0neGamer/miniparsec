@@ -79,12 +79,11 @@ data ErrorBundle t e = ErrorBundle
 --
 -- Exported only so that users can perform these operations themselves if they
 -- need, but this is included in `errorBundlePretty`.
-simplifyBundle :: forall t e. Show e => ErrorBundle t e -> ErrorBundle t e
+simplifyBundle :: ErrorBundle t e -> ErrorBundle t e
 simplifyBundle (ErrorBundle ebit ebe) = case NE.nonEmpty (filterOutOldErrorExpecteds simplerList) of
   Nothing -> ErrorBundle ebit ebe
   Just ebe' -> ErrorBundle ebit ebe'
   where
-    simplerList :: [Error t e]
     simplerList = fst $ foldl' foldel ([], M.empty) (reverse $ NE.toList ebe)
     foldel :: ([Error t e], M.Map Natural (NE.NonEmpty t, NatOne)) -> Error t e -> ([Error t e], M.Map Natural (NE.NonEmpty t, NatOne))
     foldel b@(es, expecteds) e@(Error eo el et ei) = case ei of
