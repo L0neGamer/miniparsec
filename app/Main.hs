@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Monad.Except (MonadError (..))
+import Data.Bifunctor
 import qualified Data.List.NonEmpty as NE
 import Data.Text
 import Data.Void
@@ -13,7 +14,7 @@ import Miniparsec
 main :: IO ()
 main = do
   let runParse = runParserGetBundle example
-      prettyPrintEither = either (putStrLn . unpack . errorBundlePretty) (print)
+      prettyPrintEither = either (putStrLn . unpack . errorBundlePretty) (print . second (fmap simplifyBundle))
       res1 = runParse "afunkabd" -- succeeds
       res2 = runParse "afunabd" -- fails to find any of the choices
       res3 = runParse "afunkabdc" -- fails to find the end of input after the parser is complete

@@ -16,8 +16,8 @@ import Data.List (genericReplicate)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import qualified Data.Text as T
-import Miniparsec.Stream
-import Numeric.Natural
+import Miniparsec.Stream (StreamLocation (..), TraversableStream (..))
+import Numeric.Natural (Natural)
 
 -- | Type of a number that is a Natural and at least 1.
 newtype NatOne = NatOne Natural
