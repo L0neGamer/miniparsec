@@ -1,5 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module Miniparsec.Error
   ( Error (..),
     ErrorType (..),
