@@ -69,10 +69,19 @@ instance Stream [a] where
       took = take i' t
   toStream a = [a]
 
-data StreamLocation = StreamLocation {lineNumber :: Natural, columnNumber :: Natural} deriving (Show)
+-- | Line number and column number of where we are in the `Stream`.
+data StreamLocation = StreamLocation
+  { lineNumber :: Natural,
+    columnNumber :: Natural
+  }
+  deriving (Show)
 
+-- | Methods to interact with a string-y `Stream`s.
 class Stream t => TraversableStream t where
+  -- | Travel the `Stream` and get the line and location the offset represents.
   reachOffset :: Natural -> t -> (Text, StreamLocation)
+
+  -- | Turn the `Stream` into a `Text`
   toText :: t -> Text
 
 instance TraversableStream Text where
@@ -83,15 +92,17 @@ instance TraversableStream String where
   reachOffset = reachOffset' foldl'
   toText = T.pack
 
+-- | Utility function that takes a `foldl'`, an offset, and a Stream, and
+-- returns the line the offset is on and the overall location.
 reachOffset' :: Stream t => (forall a. (a -> Char -> a) -> a -> t -> a) -> Natural -> t -> (Text, StreamLocation)
-reachOffset' folder nat t = (line, sl)
+reachOffset' foldel nat t = (line, sl)
   where
     f b@(Nothing, _, _) _ = b -- end of offset
     f (Just 0, sl', line') '\n' = (Nothing, sl', line') -- end of offset on new line
     f (Just 1, sl', line') '\n' = (Nothing, nextCol sl', line') -- newline will be end of offset
-    f (Just 0, sl', line') c = (Just 0, sl', line' <> T.singleton c) -- current character is end of offset
+    f (Just 0, sl', line') c = (Just 0, sl', line' <> T.singleton c) -- current character is end of offset. the rest of the line will be collected
     f (Just i', sl', _) '\n' = (Just (i' - 1), nextLine sl', "") -- go to next line
     f (Just i', sl', p) c = (Just (i' - 1), nextCol sl', p <> T.singleton c) -- go to next character
     nextLine (StreamLocation ln _) = StreamLocation (ln + 1) 0
     nextCol (StreamLocation ln cn) = StreamLocation ln (cn + 1)
-    (_, sl, line) = folder f (Just nat, StreamLocation 0 0, "") t
+    (_, sl, line) = foldel f (Just nat, StreamLocation 0 0, "") t
