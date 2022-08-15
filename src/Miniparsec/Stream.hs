@@ -6,7 +6,7 @@ module Miniparsec.Stream
 where
 
 import Data.Kind (Type)
-import Data.List
+import Data.List (foldl')
 import Data.Text (Text)
 import qualified Data.Text as T
 import Numeric.Natural
@@ -31,10 +31,6 @@ class Stream t where
   streamNull :: t -> Bool
   streamNull ts = 0 == streamLength ts
 
-  -- | If the stream is not empty, return `Just` the first element of the stream
-  -- and  the rest of the stream. If the stream is empty, return `Nothing`.
-  take1Stream :: t -> Maybe (Token t, t)
-
   -- | If the stream has at least `n` tokens, return `Just` the first `n` tokens
   -- and the rest of the stream. Otherwise, return `Nothing`.
   takeNStream :: Natural -> t -> Maybe (t, t)
@@ -42,32 +38,38 @@ class Stream t where
   -- | Promote a single token to a stream.
   toStream :: Token t -> t
 
+  -- | Add a token to the front of the `Stream`.
+  cons :: Token t -> t -> t
+
+  -- | If the stream is not empty, return `Just` the first element of the stream
+  -- and the rest of the stream. If the stream is empty, return `Nothing`.
+  uncons :: t -> Maybe (Token t, t)
+
+monoidTakeNStream :: (Monoid t, Stream t) => Natural -> t -> Maybe (t, t)
+monoidTakeNStream 0 t = Just (mempty, t)
+monoidTakeNStream i t = do
+  (c, t') <- uncons t
+  (later, rest) <- monoidTakeNStream (i - 1) t'
+  pure (cons c later, rest)
+
 instance Stream Text where
   type Token Text = Char
   streamLength = fromIntegral . T.length
   streamNull = T.null
-  take1Stream = T.uncons
-  takeNStream i t
-    | streamLength took == i = Just (took, T.drop i' t)
-    | otherwise = Nothing
-    where
-      i' = fromIntegral i
-      took = T.take i' t
+  takeNStream = monoidTakeNStream
   toStream = T.singleton
+  cons = T.cons
+  uncons = T.uncons
 
 instance Stream [a] where
   type Token [a] = a
   streamLength = fromIntegral . length
   streamNull = null
-  take1Stream (x : xs) = Just (x, xs)
-  take1Stream _ = Nothing
-  takeNStream i t
-    | streamLength took == i = Just (took, drop i' t)
-    | otherwise = Nothing
-    where
-      i' = fromIntegral i
-      took = take i' t
+  takeNStream = monoidTakeNStream
   toStream a = [a]
+  cons = (:)
+  uncons (x : xs) = Just (x, xs)
+  uncons _ = Nothing
 
 -- | Line number and column number of where we are in the `Stream`.
 data StreamLocation = StreamLocation

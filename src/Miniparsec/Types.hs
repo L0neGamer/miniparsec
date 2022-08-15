@@ -52,7 +52,7 @@ data State t e = State
 
 -- | Process one token from the stream.
 incrementState :: Stream t => State t e -> Maybe (Token t, State t e)
-incrementState (State s p es) = second (\s' -> State s' (p + 1) es) <$> take1Stream s
+incrementState (State s p es) = second (\s' -> State s' (p + 1) es) <$> uncons s
 
 -- | Process `n` tokens from the stream.
 increaseState :: Stream t => Natural -> State t e -> Maybe (t, State t e)

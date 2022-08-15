@@ -86,7 +86,7 @@ string' t = Parser $ \s -> case increaseState slt s of
 
 -- | Parser for the end of the input.
 eof :: Stream t => Parsec t e ()
-eof = Parser $ \s@(State t _ _) -> case take1Stream t of
+eof = Parser $ \s@(State t _ _) -> case uncons t of
   Nothing -> (s, ResultOk ())
   _ -> parse (throwErrorWarning ErrorEndOfInput) s
 
