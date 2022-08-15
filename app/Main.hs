@@ -31,5 +31,4 @@ example = do
   c <- catchError (single 'b') (\e -> trace (show e) anySingle)
   d <- char 'd'
   _ <- throwError (ErrorExpected (NE.singleton "hi")) `catchError` (\_ -> return ())
-  _ <- throwError (ErrorCustom undefined) `catchError` (\_ -> return ())
   return (b, c, d)
